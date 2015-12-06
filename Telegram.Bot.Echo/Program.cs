@@ -44,6 +44,7 @@ namespace Telegram.Bot.Echo
 
         static List<BudgetItem> s_expenses = new List<BudgetItem>();
 
+        static BudgetBotService Service;
         class BudgetItem
         {
             public DateTime Timestamp;
@@ -75,7 +76,8 @@ namespace Telegram.Bot.Echo
             try
             {
                 var Bot = new Api(TokenUrl);
-
+                Service = new BudgetBotService();
+                Service.OnMessage += Service_OnMessage;
                 var me = await Bot.GetMe();
 
                 Console.WriteLine("Hello my name is {0}", me.Username);
@@ -101,63 +103,72 @@ namespace Telegram.Bot.Echo
                             await Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
                             await Task.Delay(2000);
 
-                            var splitMessage = update.Message.Text.Trim().Split(' ');
-
-                            if (splitMessage.Length != 0 && splitMessage[0] == "budget")
+                            Service.ProcessCommand(update.Message.Text.Trim());
+                            
+                            while(m_cachedOutputs.Count > 0)
                             {
-                                try
-                                {
-                                    float newBudget = float.Parse(splitMessage[1]);
-                                    budget = newBudget;
-                                    //redis.Set("budget", newBudget);
-                                }
-                                catch (Exception e)
-                                {
-                                    Exception ex = e;
-                                }
+                                var cachedMessage = m_cachedOutputs.Dequeue();
+                                Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
                             }
-                            else if (splitMessage.Length != 0 && splitMessage[0] == "list")
-                            {
-                                var filterUser = splitMessage.Length == 2 ? splitMessage[1].Trim() : string.Empty;
 
-                                var outputString = new System.Text.StringBuilder();
-                                if (s_expenses.Count == 0)
-                                {
-                                    var tEmpty = await Bot.SendTextMessage(update.Message.Chat.Id, "No expenses recorded.");
-                                }
-                                else
-                                {
-                                    foreach (var item in s_expenses)
-                                    {
-                                        if (string.IsNullOrEmpty(filterUser) || item.User == filterUser)
-                                        {
-                                            var reply = string.Format("{0}: £{1} - ({2})", item.Timestamp.ToShortDateString(), item.Cost, item.Category);
-                                            outputString.AppendLine(reply);
-                                        }
-                                    }
+                            
+                            //var splitMessage = update.Message.Text.Trim().Split(' ');
 
-                                    var t = await Bot.SendTextMessage(update.Message.Chat.Id, outputString.ToString());
-                                }
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    var item = BudgetItem.Parse(update.Message.From.FirstName, update.Message.Text, DateTime.Now);
-                                    s_expenses.Add(item);
+                            //if (splitMessage.Length != 0 && splitMessage[0] == "budget")
+                            //{
+                            //    try
+                            //    {
+                            //        float newBudget = float.Parse(splitMessage[1]);
+                            //        budget = newBudget;
+                            //        //redis.Set("budget", newBudget);
+                            //    }
+                            //    catch (Exception e)
+                            //    {
+                            //        Exception ex = e;
+                            //    }
+                            //}
+                            //else if (splitMessage.Length != 0 && splitMessage[0] == "list")
+                            //{
+                            //    var filterUser = splitMessage.Length == 2 ? splitMessage[1].Trim() : string.Empty;
 
-                                    budget -= item.Cost;
+                            //    var outputString = new System.Text.StringBuilder();
+                            //    if (s_expenses.Count == 0)
+                            //    {
+                            //        var tEmpty = await Bot.SendTextMessage(update.Message.Chat.Id, "No expenses recorded.");
+                            //    }
+                            //    else
+                            //    {
+                            //        foreach (var item in s_expenses)
+                            //        {
+                            //            if (string.IsNullOrEmpty(filterUser) || item.User == filterUser)
+                            //            {
+                            //                var reply = string.Format("{0}: £{1} - ({2})", item.Timestamp.ToShortDateString(), item.Cost, item.Category);
+                            //                outputString.AppendLine(reply);
+                            //            }
+                            //        }
 
-                                    var reply = string.Format("Budget: £{0}", budget);
-                                    var t = await Bot.SendTextMessage(update.Message.Chat.Id, reply);
-                                    Console.WriteLine("Echo Message: {0}", update.Message.Text);
-                                }
-                                catch
-                                {
-                                    var failResponse = await Bot.SendTextMessage(update.Message.Chat.Id, "Bad entry.  Try again.");
-                                    Console.WriteLine("Echo Message: {0}", failResponse);
-                                }
-                            }
+                            //        var t = await Bot.SendTextMessage(update.Message.Chat.Id, outputString.ToString());
+                            //    }
+                            //}
+                            //else
+                            //{
+                            //    try
+                            //    {
+                            //        var item = BudgetItem.Parse(update.Message.From.FirstName, update.Message.Text, DateTime.Now);
+                            //        s_expenses.Add(item);
+
+                            //        budget -= item.Cost;
+
+                            //        var reply = string.Format("Budget: £{0}", budget);
+                            //        var t = await Bot.SendTextMessage(update.Message.Chat.Id, reply);
+                            //        Console.WriteLine("Echo Message: {0}", update.Message.Text);
+                            //    }
+                            //    catch
+                            //    {
+                            //        var failResponse = await Bot.SendTextMessage(update.Message.Chat.Id, "Bad entry.  Try again.");
+                            //        Console.WriteLine("Echo Message: {0}", failResponse);
+                            //    }
+                            //}
                         }
 
                         if (update.Message.Type == MessageType.PhotoMessage)
@@ -186,5 +197,12 @@ namespace Telegram.Bot.Echo
             }
 
         }
+
+        private static void Service_OnMessage(string msg)
+        {
+            m_cachedOutputs.Enqueue(msg);
+        }
+        
+        private static Queue<string> m_cachedOutputs = new Queue<string>();
     }
 }

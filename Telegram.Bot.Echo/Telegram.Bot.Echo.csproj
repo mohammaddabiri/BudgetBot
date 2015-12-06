@@ -87,13 +87,18 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <WCFMetadata Include="Service References\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BudgetBotTest\BudgetBotTest.csproj">
+      <Project>{198428f2-8b4d-4997-adb6-830be9a76724}</Project>
+      <Name>BudgetBotTest</Name>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </ProjectReference>
     <ProjectReference Include="..\Telegram.Bot\Telegram.Bot.csproj">
       <Project>{42e7cd69-9c5f-4a63-9341-e8c98c7cb8af}</Project>
       <Name>Telegram.Bot</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <WCFMetadata Include="Service References\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets" Condition="Exists('..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets')" />
