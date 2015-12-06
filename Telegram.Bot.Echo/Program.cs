@@ -9,7 +9,7 @@ using Engine.Storage;
 
 namespace Telegram.Bot.Echo
 {
-    class Program
+    public class Program
     {
         public static string TokenUrl = "177135231:AAFXTuYQGnhy-RVzQj7539wPoUGu-sM3s_Y";
         
@@ -20,15 +20,20 @@ namespace Telegram.Bot.Echo
 
         static void Main(string[] args)
         {
-            m_localFileStore = new LocalFileStore(m_fileStoreRoot);
-
-            //var dbs = DB.GetDatabases("127.0.0.1:6379");
-            //Console.WriteLine(dbs.Length);
-
-            redis = ServiceStack.Redis.RedisClient.New();
-            Run().Wait();            
+            Program newProgram = new Program();
+            newProgram.Start();
         }
         
+        public void Start()
+        {
+            Run().Wait();
+        }
+
+        public Program()
+        {
+            redis = ServiceStack.Redis.RedisClient.New();
+        }
+
         static float budget
         {
             get
@@ -42,9 +47,9 @@ namespace Telegram.Bot.Echo
             }        
         }
 
-        static List<BudgetItem> s_expenses = new List<BudgetItem>();
+        List<BudgetItem> s_expenses = new List<BudgetItem>();
+        BudgetBotService Service;
 
-        static BudgetBotService Service;
         class BudgetItem
         {
             public DateTime Timestamp;
@@ -71,7 +76,7 @@ namespace Telegram.Bot.Echo
             }
         }
 
-        static async Task Run()
+        async Task Run()
         {
             try
             {
@@ -101,7 +106,7 @@ namespace Telegram.Bot.Echo
                         if (update.Message.Type == MessageType.TextMessage)
                         {
                             await Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
-                            await Task.Delay(2000);
+                            //await Task.Delay(2000);
 
                             Service.ProcessCommand(update.Message.Text.Trim());
                             
@@ -188,7 +193,7 @@ namespace Telegram.Bot.Echo
                         offset = update.Id + 1;
                     }
 
-                    await Task.Delay(1000);
+                    //await Task.Delay(1000);
                 }
             }            
             catch(Exception e)
@@ -198,11 +203,11 @@ namespace Telegram.Bot.Echo
 
         }
 
-        private static void Service_OnMessage(string msg)
+        private void Service_OnMessage(string msg)
         {
             m_cachedOutputs.Enqueue(msg);
         }
         
-        private static Queue<string> m_cachedOutputs = new Queue<string>();
+        private Queue<string> m_cachedOutputs = new Queue<string>();
     }
 }

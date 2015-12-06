@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BudgetBotTest", "BudgetBotT
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BudgetBotLibrary", "BudgetBotLibrary\BudgetBotLibrary.csproj", "{58CFCA4E-D3F9-451F-84F0-0E6C26E80426}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BudgetBotService", "BudgetBotService\BudgetBotService.csproj", "{17F95997-BCBB-4D2E-B166-69A9828856C1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +48,10 @@ Global
 		{58CFCA4E-D3F9-451F-84F0-0E6C26E80426}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{58CFCA4E-D3F9-451F-84F0-0E6C26E80426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{58CFCA4E-D3F9-451F-84F0-0E6C26E80426}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17F95997-BCBB-4D2E-B166-69A9828856C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17F95997-BCBB-4D2E-B166-69A9828856C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17F95997-BCBB-4D2E-B166-69A9828856C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17F95997-BCBB-4D2E-B166-69A9828856C1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

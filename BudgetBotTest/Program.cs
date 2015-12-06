@@ -7,6 +7,17 @@ using CommandLine;
 
 public static class Extensions
 {
+    public static bool Is(this string text, params string[] list)
+    {
+        foreach(var item in list)
+        {
+            if (item == text)
+                return true;
+        }
+
+        return false;
+    }
+
     public static void SafeInvoke(this Action action)
     {
         if (action != null)
@@ -24,6 +35,25 @@ public static class Extensions
     }
 }
 
+public class DeleteBudgetCommand : Command
+{
+    public string Category;
+
+    public DeleteBudgetCommand(string category)
+    {
+        Category = category;
+    }
+
+    public override Task Execute()
+    {
+        if(Endpoints.RemoveBudgetCategory(Category))
+        {
+            Message("Removed budget");
+        }
+
+        return null;
+    }
+}
 public class AllocateBudgetCommand : Command
 {
     public string Category;
@@ -87,26 +117,33 @@ public class ListCommand : Command
     public override Task Execute()
     {
         var allTransactions = Endpoints.FetchBudgetTransactions(Category);
-        if(allTransactions.Count == 0)
+        if(allTransactions == null || allTransactions.Count == 0)
         {
             Message("No transactions recorded.");
             return null;
         }
-
-        foreach (var transaction in allTransactions)
+                
+        var transactionMessageBuilder = new StringBuilder();
+        foreach (var transaction in allTransactions.OrderByDescending(x => x.Timestamp))
         {
             var transactionMessage = FormatTransaction(transaction);
-            Message(transactionMessage);
+            transactionMessageBuilder.AppendLine(transactionMessage);
+            
         }
+        if(transactionMessageBuilder.Length != 0)
+        {
+            Message(transactionMessageBuilder.ToString());
+        }
+
         return base.Execute();
     }
 
     string FormatTransaction(BudgetTransaction transaction)
     {
-        var noteFormatting = !string.IsNullOrEmpty(transaction.Notes) ? "{0}: {1} - {2}" : "{0}: {1}";
+        var noteFormatting = !string.IsNullOrEmpty(transaction.Notes) ? "{0}  \t  {1}\t {2}" : "{0}  \t  {1}\t";
         //if (!string.IsNullOrEmpty(transaction.Notes))
         //{
-        return string.Format(noteFormatting, transaction.Timestamp.ToShortDateString(), transaction.Cost.ToString("C").PadRight(8), transaction.Notes);
+        return string.Format(noteFormatting, transaction.Timestamp.ToString("MM'/'dd'/'yy HH':'mm"), transaction.Cost.ToString("C").PadRight(8), transaction.Notes);
         //}
 
         //return string.Format(noteFormatting, transaction.Timestamp.ToShortDateString(), transaction.Cost.ToString("C"));
@@ -182,7 +219,7 @@ public class ReportBudgetCommand : Command
     {
         var spendingPct = balance / category.Limit;
         var remainingDays = category.Period.RemainingDays;
-        return string.Format("{0}: {1} / {2} ({3}) {4} days", category.Name.PadRight(16), balance.ToString("C"), category.Limit.ToString("C"), spendingPct.ToString("P0"), remainingDays);
+        return string.Format("{0} {1} / {2} ({3}) {4} days", category.Name.PadRight(16), balance.ToString("C"), category.Limit.ToString("C"), spendingPct.ToString("P0"), remainingDays.ToString().PadLeft(4));
     }
 }
 
@@ -191,15 +228,17 @@ public class AddTransactionCommand : Command
     public string Category;
     public float Cost;
     public string Notes;
+    public DateTime Timestamp = DateTime.Now;
 
     public AddTransactionCommand()
     {
     }
 
-    public AddTransactionCommand(string category, float cost, string notes = "")
+    public AddTransactionCommand(string category, float cost, DateTime timestamp, string notes = "")
     {
         Category = category;
         Cost = cost;
+        Timestamp = timestamp;
         Notes = notes;
     }
 
@@ -220,7 +259,7 @@ public class AddTransactionCommand : Command
             }
             else
             {
-                var newTransaction = Endpoints.AddTransaction(Category, Cost, Notes);
+                var newTransaction = Endpoints.AddTransaction(Category, Cost, Timestamp, Notes);
                 if (newTransaction == null)
                 {
                     Message("Failed to log transaction");
@@ -244,13 +283,27 @@ public class AddTransactionCommandParser : CommandParser
 {
     public override Command Parse(CommandLineArg[] args)
     {
-        var notelessCommand = args.Length == 2 && args[0].IsAlpha && args[1].IsNumeric;
-        if (notelessCommand)
+        // food 1.99 12/06 greggs
+        var withNoteWithDate = args.Length > 3 && args[0].IsAlpha && args[1].IsNumeric && args[2].IsDate;
+        if (withNoteWithDate)
         {
-            return new AddTransactionCommand(args[0], args[1].AsFloat);
+            var notesBuilder = new StringBuilder();
+            for (var i = 3; i < args.Length; ++i)
+            {
+                notesBuilder.Append(args[i]);
+                notesBuilder.Append(" ");
+            }
+            return new AddTransactionCommand(args[0], args[1].AsFloat, args[2].AsDate, notesBuilder.ToString());
         }
-        var withNoteCommand = args.Length > 2 && args[0].IsAlpha && args[1].IsNumeric;
-        if (withNoteCommand)
+        // food 1.99 12/06
+        var noNoteWithDate = args.Length == 3 && args[0].IsAlpha && args[1].IsNumeric && args[2].IsDate;
+        if (noNoteWithDate)
+        {
+            return new AddTransactionCommand(args[0], args[1].AsFloat, args[2].AsDate);
+        }
+        // food 1.99 greggs
+        var withNoteNoDate = args.Length > 2 && args[0].IsAlpha && args[1].IsNumeric;
+        if (withNoteNoDate)
         {
             var notesBuilder = new StringBuilder();
             for (var i = 2; i < args.Length; ++i)
@@ -258,17 +311,23 @@ public class AddTransactionCommandParser : CommandParser
                 notesBuilder.Append(args[i]);
                 notesBuilder.Append(" ");
             }
-            return new AddTransactionCommand(args[0], args[1].AsFloat, notesBuilder.ToString());
+            return new AddTransactionCommand(args[0], args[1].AsFloat, DateTime.Now, notesBuilder.ToString());
         }
-
+        // food 1.99
+        var noNoteNoDate = args.Length == 2 && args[0].IsAlpha && args[1].IsNumeric;
+        if (noNoteNoDate)
+        {
+            return new AddTransactionCommand(args[0], args[1].AsFloat, DateTime.Now);
+        }
         return null;
     }
 }
 public class ReportBudgetCommandParser : CommandParser
 {
+    public string[] Keywords = new string[] { "budget", "بوجه" };
     public override Command Parse(CommandLineArg[] args)
     {
-        if (args.Length == 1 && args[0] == "budget")
+        if (args.Length == 1 && args[0].AsString.Is(Keywords))
         {
             return new ReportBudgetCommand();
         }
@@ -318,13 +377,31 @@ public class CommandLineArg
         IsAlpha = !IsNumeric && !IsDate;
     }
 }
+
+public class DeleteBudgetCommandParser : CommandParser
+{
+    public string[] Keywords = new string[] { "budget", "بوجه" };
+    public override Command Parse(CommandLineArg[] args)
+    {
+        // delete food 
+        BudgetInterval interval;
+        if (args.Length == 2 && args[0].AsString.Is("delete") && Endpoints.GetBudgetCategory(args[1]) != null)
+        {
+            return new DeleteBudgetCommand(args[1]);
+        }
+
+        return null;
+    }
+}
+
 public class AllocateBudgetCommandParser : CommandParser
 {
+    public string[] Keywords = new string[] { "budget", "بوجه" };
     public override Command Parse(CommandLineArg[] args)
     {
         // budget food 200 20/12 1m
         BudgetInterval interval;
-        if (args.Length == 5 && args[0] == "budget" && args[1].IsAlpha && args[2].IsFloat && args[3].IsDate && args[4].IsAlpha && BudgetInterval.TryParse(args[4], out interval))
+        if (args.Length == 5 && args[0].AsString.Is(Keywords) && args[1].IsAlpha && args[2].IsFloat && args[3].IsDate && args[4].IsAlpha && BudgetInterval.TryParse(args[4], out interval))
         {
             return new AllocateBudgetCommand(args[1], args[2].AsFloat, args[3].AsDate, interval);
         }
@@ -410,10 +487,10 @@ public class BudgetEndpoints
         return budgetList;
     }
 
-    public BudgetTransaction AddTransaction(string category, float cost, string notes = "")
+    public BudgetTransaction AddTransaction(string category, float cost, DateTime timestamp, string notes = "")
     {
         var transactions = FetchBudgetTransactions(category);
-        var newTransaction = new BudgetTransaction(DateTime.Now, category, cost, notes);
+        var newTransaction = new BudgetTransaction(timestamp, category, cost, notes);
         transactions.Add(newTransaction);
 
         s_redis.SetValue("budget-" + category.ToLower(), transactions.AsJson());
@@ -421,6 +498,22 @@ public class BudgetEndpoints
         return newTransaction;
     }
 
+    public bool RemoveBudgetCategory(string newCategory)
+    {
+        var removed = false;
+        var budgetList = FetchBudgetList();
+        var budgetCategory = budgetList[newCategory];
+        if (budgetCategory != null)
+        {
+            removed = budgetList.Categories.Remove(budgetCategory);
+        }
+                
+        s_redis.SetValue("budgets", budgetList.AsJson());
+        s_redis.Save();
+
+        return removed;
+    }
+    
     public BudgetList AddBudgetCategory(string newCategory, float budget, DateTime startDate, BudgetInterval interval)
     {
         var budgetList = FetchBudgetList();
@@ -675,6 +768,8 @@ public class BudgetBotService
         {
             args.Add(new CommandLineArg(argString));
         }
+        args.RemoveAll(x => x == "" || string.IsNullOrWhiteSpace(x.AsString));
+
         foreach (var parser in s_commandParsers)
         {
             try
@@ -708,6 +803,7 @@ public class BudgetBotService
         AddCommandParser(new ListCommandParser());
         AddCommandParser(new ClearListCommandParser());
         AddCommandParser(new AllocateBudgetCommandParser());
+        AddCommandParser(new DeleteBudgetCommandParser());        
         AddCommandParser(new AddTransactionCommandParser());
         AddCommandParser(new ReportBudgetCommandParser());
     }
