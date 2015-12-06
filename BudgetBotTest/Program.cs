@@ -384,7 +384,6 @@ public class DeleteBudgetCommandParser : CommandParser
     public override Command Parse(CommandLineArg[] args)
     {
         // delete food 
-        BudgetInterval interval;
         if (args.Length == 2 && args[0].AsString.Is("delete") && Endpoints.GetBudgetCategory(args[1]) != null)
         {
             return new DeleteBudgetCommand(args[1]);
@@ -400,6 +399,11 @@ public class AllocateBudgetCommandParser : CommandParser
     public override Command Parse(CommandLineArg[] args)
     {
         // budget food 200 20/12 1m
+        if (args.Length == 4 && args[0].AsString.Is(Keywords) && args[1].IsAlpha && args[2].IsFloat && args[3].IsDate)
+        {
+            return new AllocateBudgetCommand(args[1], args[2].AsFloat, args[3].AsDate, BudgetInterval.OneMonth);
+        }
+
         BudgetInterval interval;
         if (args.Length == 5 && args[0].AsString.Is(Keywords) && args[1].IsAlpha && args[2].IsFloat && args[3].IsDate && args[4].IsAlpha && BudgetInterval.TryParse(args[4], out interval))
         {
@@ -588,6 +592,8 @@ public enum BudgetIntervals
 [Serializable]
 public class BudgetInterval
 {
+    public static readonly BudgetInterval OneMonth = new BudgetInterval(BudgetIntervals.Monthly, 1);
+
     public BudgetIntervals Units = BudgetIntervals.Monthly;
     public int Span = 1;
 
