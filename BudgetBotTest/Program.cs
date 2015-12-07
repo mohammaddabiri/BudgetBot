@@ -44,7 +44,7 @@ public class DeleteBudgetCommand : Command
         Category = category;
     }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         if(Endpoints.RemoveBudgetCategory(Category))
         {
@@ -69,7 +69,7 @@ public class AllocateBudgetCommand : Command
         Interval = interval;
     }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         Endpoints.AddBudgetCategory(Category, Amount, StartDate, Interval);
         var successMsg = string.Format("Category \"{0}\" added.", Category);
@@ -87,10 +87,10 @@ public class ClearListCommand : Command
         Category = category;
     }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         Endpoints.ClearBudgetTransactions(Category);        
-        return base.Execute();
+        return base.Execute(timestamp);
     }
 
     string FormatTransaction(BudgetTransaction transaction)
@@ -114,7 +114,7 @@ public class ListCommand : Command
         Category = category;
     }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         var allTransactions = Endpoints.FetchBudgetTransactions(Category);
         if(allTransactions == null || allTransactions.Count == 0)
@@ -135,7 +135,7 @@ public class ListCommand : Command
             Message(transactionMessageBuilder.ToString());
         }
 
-        return base.Execute();
+        return base.Execute(timestamp);
     }
 
     string FormatTransaction(BudgetTransaction transaction)
@@ -154,7 +154,7 @@ public abstract class Command
 {
     public event Action<string> OnMessage;
     public BudgetEndpoints Endpoints;
-    public virtual async Task Execute() { }
+    public virtual async Task Execute(DateTime timestamp) { }
     public void Message(string text)
     {
         OnMessage.SafeInvoke(text);
@@ -180,7 +180,7 @@ public class ReportBudgetCommand : Command
     public ReportBudgetCommand() { }
     public ReportBudgetCommand(string category) { Category = category; }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         var budgetList = Endpoints.FetchBudgetList();
         if (budgetList == null || budgetList.Categories == null || budgetList.Categories.Count == 0)
@@ -242,7 +242,7 @@ public class AddTransactionCommand : Command
         Notes = notes;
     }
 
-    public override Task Execute()
+    public override Task Execute(DateTime timestamp)
     {
         var budgetList = Endpoints.FetchBudgetList();
         if (budgetList == null)
@@ -745,12 +745,12 @@ public class BudgetBotService
     ServiceStack.Redis.RedisClient s_redis;
     BudgetEndpoints s_endpoints;
 
-    void InterpretCommand(Command command)
+    void InterpretCommand(Command command, DateTime timestamp)
     {
         // Just implementing execution from within the command for now.
         command.Endpoints = s_endpoints;
         command.OnMessage += OnCommandMessage;
-        command.Execute();
+        command.Execute(timestamp);
     }
 
     private void OnCommandMessage(string obj)
@@ -814,13 +814,13 @@ public class BudgetBotService
         AddCommandParser(new ReportBudgetCommandParser());
     }
     
-    public void ProcessCommand(string userCommand)
+    public void ProcessCommand(string userCommand, DateTime timestamp)
     {
         Command command;
         if (FindCommandParser(userCommand, out command))
         {
             //Console.WriteLine("Command found");
-            InterpretCommand(command);
+            InterpretCommand(command, timestamp);
             Message("");
         }
         else
@@ -854,7 +854,7 @@ public class BudgetBotService
             while (true)
             {
                 var userCommand = Console.ReadLine();
-                Service.ProcessCommand(userCommand);
+                Service.ProcessCommand(userCommand, DateTime.Now);
             }
         }       
     }

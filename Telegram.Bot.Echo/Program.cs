@@ -108,7 +108,7 @@ namespace Telegram.Bot.Echo
                             await Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
                             //await Task.Delay(2000);
 
-                            Service.ProcessCommand(update.Message.Text.Trim());
+                            Service.ProcessCommand(update.Message.Text.Trim(), update.Message.Date);
                             
                             while(m_cachedOutputs.Count > 0)
                             {
