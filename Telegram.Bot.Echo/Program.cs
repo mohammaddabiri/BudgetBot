@@ -13,11 +13,6 @@ namespace Telegram.Bot.Echo
     {
         public static string TokenUrl = "177135231:AAFXTuYQGnhy-RVzQj7539wPoUGu-sM3s_Y";
         
-        static ServiceStack.Redis.RedisClient redis;
-        static LocalFileStore m_localFileStore;
-        static string m_fileStoreRoot = @"D:\dev\budgetBot";
-        static string m_transactionLogFile = @"";
-
         static void Main(string[] args)
         {
             Program newProgram = new Program();
@@ -31,51 +26,8 @@ namespace Telegram.Bot.Echo
 
         public Program()
         {
-            redis = ServiceStack.Redis.RedisClient.New();
         }
-
-        static float budget
-        {
-            get
-            {
-                var budget = redis.Get<float>("budget");
-                return budget;
-            }
-            set
-            {
-                redis.Set("budget", value);
-            }        
-        }
-
-        List<BudgetItem> s_expenses = new List<BudgetItem>();
-        BudgetBotService Service;
-
-        class BudgetItem
-        {
-            public DateTime Timestamp;
-            public string User;
-            public string Category;
-            public float Cost;
-
-            public static BudgetItem Parse(string user, string message, DateTime timeStamp)
-            {
-                var split = message.Trim().Split(' ');
-                var splitList = split.ToList<string>();
-
-                var costText = split[splitList.Count - 1];
-                var cost = float.Parse(costText);
-                splitList.RemoveAt(splitList.Count - 1);
-
-                var itemText = message.Replace(costText, string.Empty);                
-                BudgetItem item = new BudgetItem();
-                item.User = user;
-                item.Category = itemText;
-                item.Cost = cost;
-                item.Timestamp = timeStamp;
-                return item;
-            }
-        }
-
+        
         async Task Run()
         {
             try
@@ -115,65 +67,6 @@ namespace Telegram.Bot.Echo
                                 var cachedMessage = m_cachedOutputs.Dequeue();
                                 Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
                             }
-
-                            
-                            //var splitMessage = update.Message.Text.Trim().Split(' ');
-
-                            //if (splitMessage.Length != 0 && splitMessage[0] == "budget")
-                            //{
-                            //    try
-                            //    {
-                            //        float newBudget = float.Parse(splitMessage[1]);
-                            //        budget = newBudget;
-                            //        //redis.Set("budget", newBudget);
-                            //    }
-                            //    catch (Exception e)
-                            //    {
-                            //        Exception ex = e;
-                            //    }
-                            //}
-                            //else if (splitMessage.Length != 0 && splitMessage[0] == "list")
-                            //{
-                            //    var filterUser = splitMessage.Length == 2 ? splitMessage[1].Trim() : string.Empty;
-
-                            //    var outputString = new System.Text.StringBuilder();
-                            //    if (s_expenses.Count == 0)
-                            //    {
-                            //        var tEmpty = await Bot.SendTextMessage(update.Message.Chat.Id, "No expenses recorded.");
-                            //    }
-                            //    else
-                            //    {
-                            //        foreach (var item in s_expenses)
-                            //        {
-                            //            if (string.IsNullOrEmpty(filterUser) || item.User == filterUser)
-                            //            {
-                            //                var reply = string.Format("{0}: £{1} - ({2})", item.Timestamp.ToShortDateString(), item.Cost, item.Category);
-                            //                outputString.AppendLine(reply);
-                            //            }
-                            //        }
-
-                            //        var t = await Bot.SendTextMessage(update.Message.Chat.Id, outputString.ToString());
-                            //    }
-                            //}
-                            //else
-                            //{
-                            //    try
-                            //    {
-                            //        var item = BudgetItem.Parse(update.Message.From.FirstName, update.Message.Text, DateTime.Now);
-                            //        s_expenses.Add(item);
-
-                            //        budget -= item.Cost;
-
-                            //        var reply = string.Format("Budget: £{0}", budget);
-                            //        var t = await Bot.SendTextMessage(update.Message.Chat.Id, reply);
-                            //        Console.WriteLine("Echo Message: {0}", update.Message.Text);
-                            //    }
-                            //    catch
-                            //    {
-                            //        var failResponse = await Bot.SendTextMessage(update.Message.Chat.Id, "Bad entry.  Try again.");
-                            //        Console.WriteLine("Echo Message: {0}", failResponse);
-                            //    }
-                            //}
                         }
 
                         if (update.Message.Type == MessageType.PhotoMessage)
@@ -192,8 +85,6 @@ namespace Telegram.Bot.Echo
 
                         offset = update.Id + 1;
                     }
-
-                    //await Task.Delay(1000);
                 }
             }            
             catch(Exception e)
@@ -207,7 +98,8 @@ namespace Telegram.Bot.Echo
         {
             m_cachedOutputs.Enqueue(msg);
         }
-        
+
+        private BudgetBotService Service;
         private Queue<string> m_cachedOutputs = new Queue<string>();
     }
 }
