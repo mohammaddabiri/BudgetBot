@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using CommandLine;
+using ZedGraph;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 public static class Extensions
 {
@@ -322,6 +324,146 @@ public class AddTransactionCommandParser : CommandParser
         return null;
     }
 }
+
+public class VisualiseBudgetCommand : Command
+{
+    public string Category;
+
+    public VisualiseBudgetCommand(string category)
+    {
+        Category = category;
+    }
+    // Build the Chart
+    private void CreateGraph(ref GraphPane myPane)
+    {
+        // Set the Titles
+        myPane.Title.Text = "My Test Bar Graph";
+        myPane.XAxis.Title.Text = "Label";
+        myPane.YAxis.Title.Text = "My Y Axis";
+
+        // Make up some random data points
+        string[] labels = { "Panther", "Lion", "Cheetah",
+                      "Cougar", "Tiger", "Leopard" };
+        double[] y = { 100, 115, 75, 22, 98, 40 };
+        double[] y2 = { 90, 100, 95, 35, 80, 35 };
+        double[] y3 = { 80, 110, 65, 15, 54, 67 };
+        double[] y4 = { 120, 125, 100, 40, 105, 75 };
+
+        // Generate a red bar with "Curve 1" in the legend
+        BarItem myBar = myPane.AddBar("Curve 1", null, y,
+                                                    Color.Red);
+        myBar.Bar.Fill = new Fill(Color.Red, Color.White,
+                                                    Color.Red);
+
+        // Generate a blue bar with "Curve 2" in the legend
+        myBar = myPane.AddBar("Curve 2", null, y2, Color.Blue);
+        myBar.Bar.Fill = new Fill(Color.Blue, Color.White,
+                                                    Color.Blue);
+
+        // Generate a green bar with "Curve 3" in the legend
+        myBar = myPane.AddBar("Curve 3", null, y3, Color.Green);
+        myBar.Bar.Fill = new Fill(Color.Green, Color.White,
+                                                    Color.Green);
+
+        // Generate a black line with "Curve 4" in the legend
+        LineItem myCurve = myPane.AddCurve("Curve 4",
+              null, y4, Color.Black, SymbolType.Circle);
+        myCurve.Line.Fill = new Fill(Color.White,
+                              Color.LightSkyBlue, -45F);
+
+        // Fix up the curve attributes a little
+        myCurve.Symbol.Size = 8.0F;
+        myCurve.Symbol.Fill = new Fill(Color.White);
+        myCurve.Line.Width = 2.0F;
+
+        // Draw the X tics between the labels instead of 
+        // at the labels
+        myPane.XAxis.MajorTic.IsBetweenLabels = true;
+
+        // Set the XAxis labels
+        myPane.XAxis.Scale.TextLabels = labels;
+        // Set the XAxis to Text type
+        myPane.XAxis.Type = AxisType.Text;
+
+        // Fill the Axis and Pane backgrounds
+        myPane.Chart.Fill = new Fill(Color.White,
+              Color.FromArgb(255, 255, 166), 90F);
+        myPane.Fill = new Fill(Color.FromArgb(250, 250, 255));
+
+        // Tell ZedGraph to refigure the
+        // axes since the data have changed
+        //zg1.AxisChange(
+    }
+    public override Task Execute(DateTime timestamp)
+    {
+        var allTransactions = Endpoints.FetchBudgetTransactions(Category);
+        var category = Endpoints.GetBudgetCategory(Category);
+        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0);
+
+        ZedGraph.GraphPane pane = new ZedGraph.GraphPane();
+        CreateGraph(ref pane);
+
+        //ZedGraph.PointPairList teamAPairList = new ZedGraph.PointPairList();
+        //ZedGraph.PointPairList teamBPairList = new ZedGraph.PointPairList();
+        //var graphData = BuildBudgetGraph(category, allExpenses.ToList());
+
+        ////var allTransaction = Endpoints.FetchBudgetTransactions(Category);
+
+        //pane.AddBar("Balance", graphData, System.Drawing.Color.Red);
+
+        //foreach (var data in graphData)
+        //{
+        //}
+
+        //pane.AddBar("2", teamBPairList, System.Drawing.Color.Green);
+
+        var tempFile = System.IO.Path.GetTempFileName() + ".png";
+        System.Drawing.Bitmap bitmap = new System.Drawing.Bitmap(Convert.ToInt32(1024), Convert.ToInt32(1024), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bitmap);
+        pane.Draw(g);
+        bitmap.Save(tempFile, System.Drawing.Imaging.ImageFormat.Png);
+        Message("image://" + tempFile);
+
+        return null;
+    }
+
+    private ZedGraph.PointPairList BuildBudgetGraph(BudgetCategory category, IList<BudgetTransaction> transactions)
+    {
+        var balance = category.Limit;
+        var output = new ZedGraph.PointPairList();
+        for(int i = 0; i < category.Period.Days; ++i)
+        {
+            var date = category.Period.StartDate + TimeSpan.FromDays(i);
+            var dailyExpense = transactions.Where(x => x.Timestamp.Date == date).Sum(e => e.Cost);
+            balance -= dailyExpense;
+            output.Add(date.Day, balance);
+        }
+        
+        return output;
+    }
+
+    private int[] buildTeamBData()
+    {
+        int[] goalsScored = new int[10];
+        for (int i = 0; i < 10; i++)
+        {
+            goalsScored[i] = (i + 10) * 11;
+        }
+        return goalsScored;
+    }
+}
+public class VisualiseBudgetCommandParser : CommandParser
+{   
+    public override Command Parse(CommandLineArg[] args)
+    {
+        if(args.Length == 2 && Endpoints.GetBudgetCategory(args[0]) != null && args[1] == "show")
+        {
+            return new VisualiseBudgetCommand(args[0]);
+        }
+
+        return null;
+    }
+}
 public class ReportBudgetCommandParser : CommandParser
 {
     public string[] Keywords = new string[] { "budget", "بوجه" };
@@ -468,6 +610,15 @@ public class BudgetEndpoints
     {
         var budgetList = FetchBudgetList();
         return budgetList[category];
+    }
+
+    public float GetBalanceAt(string categoryName, DateTime time)
+    {
+        var allTransactions = FetchBudgetTransactions(categoryName);
+        var category = GetBudgetCategory(categoryName);
+        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0 && o.Timestamp.CompareTo(time) > 0).Sum(x => x.Cost);
+        var newBalance = category.Limit - allExpenses;
+        return newBalance;
     }
 
     public float GetBalance(string categoryName)
@@ -648,6 +799,8 @@ public class BudgetInterval
 [Serializable]
 public class BudgetPeriod
 {
+    public int Days { get{ return (End - StartDate).Days; } }
+
     public DateTime StartDate;
     public BudgetInterval Interval = new BudgetInterval();
 
@@ -812,6 +965,7 @@ public class BudgetBotService
         AddCommandParser(new DeleteBudgetCommandParser());        
         AddCommandParser(new AddTransactionCommandParser());
         AddCommandParser(new ReportBudgetCommandParser());
+        AddCommandParser(new VisualiseBudgetCommandParser());        
     }
     
     public void ProcessCommand(string userCommand, DateTime timestamp)

@@ -65,7 +65,17 @@ namespace Telegram.Bot.Echo
                             while(m_cachedOutputs.Count > 0)
                             {
                                 var cachedMessage = m_cachedOutputs.Dequeue();
-                                Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
+                                if (cachedMessage.StartsWith("image://"))
+                                {
+                                    var imageUrl = cachedMessage.Replace("image://", "");
+                                    var fileStream = new FileStream(imageUrl, FileMode.Open);
+                                    var fileToSend = new FileToSend(imageUrl, fileStream);
+                                    Bot.SendPhoto(update.Message.Chat.Id, fileToSend);
+                                }
+                                else
+                                {
+                                    Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
+                                }
                             }
                         }
 
