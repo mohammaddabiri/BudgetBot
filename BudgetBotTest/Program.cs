@@ -354,11 +354,11 @@ public class VisualiseBudgetCommand : Command
         chart.Size = new Size(600, 250);
 
         var chartArea = new ChartArea();
-        chartArea.AxisX.LabelStyle.Format = "dd/MMM\nhh:mm";
+        chartArea.AxisX.LabelStyle.Format = "dd/MMM";
         chartArea.AxisX.MajorGrid.LineColor = Color.LightGray;
         chartArea.AxisY.MajorGrid.LineColor = Color.LightGray;
         chartArea.AxisX.LabelStyle.Font = new Font("Consolas", 8);
-        chartArea.AxisY.LabelStyle.Font = new Font("Consolas", 8);
+        chartArea.AxisY.LabelStyle.Font = new Font("Consolas", 8);        
         chart.ChartAreas.Add(chartArea);
 
         var series = new Series();
