@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using ZedGraph;
+//using ZedGraph;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Windows.Forms.DataVisualization.Charting;
 
 public static class Extensions
 {
@@ -333,123 +334,183 @@ public class VisualiseBudgetCommand : Command
     {
         Category = category;
     }
-    // Build the Chart
-    private void CreateGraph(ref GraphPane myPane)
+
+    private void CreateGraph(GraphData<DateTime, float> data, string filePath)
     {
-        // Set the Titles
-        myPane.Title.Text = "My Test Bar Graph";
-        myPane.XAxis.Title.Text = "Label";
-        myPane.YAxis.Title.Text = "My Y Axis";
+        // set up some data
+        var xvals = data.X.ToArray();
+        var yvals = data.Y.ToArray();
 
-        // Make up some random data points
-        string[] labels = { "Panther", "Lion", "Cheetah",
-                      "Cougar", "Tiger", "Leopard" };
-        double[] y = { 100, 115, 75, 22, 98, 40 };
-        double[] y2 = { 90, 100, 95, 35, 80, 35 };
-        double[] y3 = { 80, 110, 65, 15, 54, 67 };
-        double[] y4 = { 120, 125, 100, 40, 105, 75 };
+        var startingY = yvals[0];
+        var linearY = new float[yvals.Length];
+        for(var i = 0; i < xvals.Length; ++i)
+        {
+            var xPct = i / (float)xvals.Length;
+            linearY[i] = startingY * (1f-xPct);
+        }
 
-        // Generate a red bar with "Curve 1" in the legend
-        BarItem myBar = myPane.AddBar("Curve 1", null, y,
-                                                    Color.Red);
-        myBar.Bar.Fill = new Fill(Color.Red, Color.White,
-                                                    Color.Red);
+        // create the chart
+        var chart = new Chart();
+        chart.Size = new Size(600, 250);
 
-        // Generate a blue bar with "Curve 2" in the legend
-        myBar = myPane.AddBar("Curve 2", null, y2, Color.Blue);
-        myBar.Bar.Fill = new Fill(Color.Blue, Color.White,
-                                                    Color.Blue);
+        var chartArea = new ChartArea();
+        chartArea.AxisX.LabelStyle.Format = "dd/MMM\nhh:mm";
+        chartArea.AxisX.MajorGrid.LineColor = Color.LightGray;
+        chartArea.AxisY.MajorGrid.LineColor = Color.LightGray;
+        chartArea.AxisX.LabelStyle.Font = new Font("Consolas", 8);
+        chartArea.AxisY.LabelStyle.Font = new Font("Consolas", 8);
+        chart.ChartAreas.Add(chartArea);
 
-        // Generate a green bar with "Curve 3" in the legend
-        myBar = myPane.AddBar("Curve 3", null, y3, Color.Green);
-        myBar.Bar.Fill = new Fill(Color.Green, Color.White,
-                                                    Color.Green);
+        var series = new Series();
+        series.Name = "Series1";
+        series.ChartType = SeriesChartType.FastLine;
+        series.XValueType = ChartValueType.DateTime;
+        chart.Series.Add(series);
 
-        // Generate a black line with "Curve 4" in the legend
-        LineItem myCurve = myPane.AddCurve("Curve 4",
-              null, y4, Color.Black, SymbolType.Circle);
-        myCurve.Line.Fill = new Fill(Color.White,
-                              Color.LightSkyBlue, -45F);
+        //var series3 = new Series();
+        //series.Name = "Series3";
+        //series.ChartType = SeriesChartType.Spline;
+        //series.XValueType = ChartValueType.DateTime;
+        //chart.Series.Add(series3);
 
-        // Fix up the curve attributes a little
-        myCurve.Symbol.Size = 8.0F;
-        myCurve.Symbol.Fill = new Fill(Color.White);
-        myCurve.Line.Width = 2.0F;
+        // bind the datapoints
+        chart.Series["Series1"].Points.DataBindXY(xvals, yvals);
 
-        // Draw the X tics between the labels instead of 
-        // at the labels
-        myPane.XAxis.MajorTic.IsBetweenLabels = true;
+        // copy the series and manipulate the copy
+        chart.DataManipulator.CopySeriesValues("Series1", "Series2");
+        chart.DataManipulator.FinancialFormula(
+            FinancialFormula.WeightedMovingAverage,
+            "Series2"
+        );
+        chart.Series["Series2"].ChartType = SeriesChartType.FastLine;
 
-        // Set the XAxis labels
-        myPane.XAxis.Scale.TextLabels = labels;
-        // Set the XAxis to Text type
-        myPane.XAxis.Type = AxisType.Text;
+        //chart.Series["Series3"].Points.DataBindXY(xvals, yvals);
+        // copy the series and manipulate the copy
+        chart.DataManipulator.CopySeriesValues("Series1", "Series3");
+        chart.DataManipulator.FinancialFormula(
+            FinancialFormula.MovingAverage,
+            "Series3"
+        );
 
-        // Fill the Axis and Pane backgrounds
-        myPane.Chart.Fill = new Fill(Color.White,
-              Color.FromArgb(255, 255, 166), 90F);
-        myPane.Fill = new Fill(Color.FromArgb(250, 250, 255));
+        chart.Series["Series3"].Points.DataBindXY(xvals, linearY);
+        chart.Series["Series3"].ChartType = SeriesChartType.Spline;
 
-        // Tell ZedGraph to refigure the
-        // axes since the data have changed
-        //zg1.AxisChange(
+        // draw!
+        chart.Invalidate();
+
+        // write out a file
+        chart.SaveImage(filePath, ChartImageFormat.Png);
     }
+    //// Build the Chart
+    //private void CreateGraph(ref GraphPane myPane)
+    //{
+    //    // Set the Titles
+    //    myPane.Title.Text = "My Test Bar Graph";
+    //    myPane.XAxis.Title.Text = "Label";
+    //    myPane.YAxis.Title.Text = "My Y Axis";
+
+    //    // Make up some random data points
+    //    string[] labels = { "Panther", "Lion", "Cheetah",
+    //                  "Cougar", "Tiger", "Leopard" };
+    //    double[] y = { 100, 115, 75, 22, 98, 40 };
+    //    double[] y2 = { 90, 100, 95, 35, 80, 35 };
+    //    double[] y3 = { 80, 110, 65, 15, 54, 67 };
+    //    double[] y4 = { 120, 125, 100, 40, 105, 75 };
+
+    //    // Generate a red bar with "Curve 1" in the legend
+    //    BarItem myBar = myPane.AddBar("Curve 1", null, y,
+    //                                                Color.Red);
+    //    myBar.Bar.Fill = new Fill(Color.Red, Color.White,
+    //                                                Color.Red);
+
+    //    // Generate a blue bar with "Curve 2" in the legend
+    //    myBar = myPane.AddBar("Curve 2", null, y2, Color.Blue);
+    //    myBar.Bar.Fill = new Fill(Color.Blue, Color.White,
+    //                                                Color.Blue);
+
+    //    // Generate a green bar with "Curve 3" in the legend
+    //    myBar = myPane.AddBar("Curve 3", null, y3, Color.Green);
+    //    myBar.Bar.Fill = new Fill(Color.Green, Color.White,
+    //                                                Color.Green);
+
+    //    // Generate a black line with "Curve 4" in the legend
+    //    LineItem myCurve = myPane.AddCurve("Curve 4",
+    //          null, y4, Color.Black, SymbolType.Circle);
+    //    myCurve.Line.Fill = new Fill(Color.White,
+    //                          Color.LightSkyBlue, -45F);
+
+    //    // Fix up the curve attributes a little
+    //    myCurve.Symbol.Size = 8.0F;
+    //    myCurve.Symbol.Fill = new Fill(Color.White);
+    //    myCurve.Line.Width = 2.0F;
+
+    //    // Draw the X tics between the labels instead of 
+    //    // at the labels
+    //    myPane.XAxis.MajorTic.IsBetweenLabels = true;
+
+    //    // Set the XAxis labels
+    //    myPane.XAxis.Scale.TextLabels = labels;
+    //    // Set the XAxis to Text type
+    //    myPane.XAxis.Type = AxisType.Text;
+
+    //    // Fill the Axis and Pane backgrounds
+    //    myPane.Chart.Fill = new Fill(Color.White,
+    //          Color.FromArgb(255, 255, 166), 90F);
+    //    myPane.Fill = new Fill(Color.FromArgb(250, 250, 255));
+
+    //    // Tell ZedGraph to refigure the
+    //    // axes since the data have changed
+    //    //zg1.AxisChange(
+    //}
     public override Task Execute(DateTime timestamp)
     {
         var allTransactions = Endpoints.FetchBudgetTransactions(Category);
         var category = Endpoints.GetBudgetCategory(Category);
         var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0);
 
-        ZedGraph.GraphPane pane = new ZedGraph.GraphPane();
-        CreateGraph(ref pane);
-
-        //ZedGraph.PointPairList teamAPairList = new ZedGraph.PointPairList();
-        //ZedGraph.PointPairList teamBPairList = new ZedGraph.PointPairList();
-        //var graphData = BuildBudgetGraph(category, allExpenses.ToList());
-
-        ////var allTransaction = Endpoints.FetchBudgetTransactions(Category);
-
-        //pane.AddBar("Balance", graphData, System.Drawing.Color.Red);
-
-        //foreach (var data in graphData)
-        //{
-        //}
-
-        //pane.AddBar("2", teamBPairList, System.Drawing.Color.Green);
-
+        var graphData = BuildBudgetGraph(category, allExpenses.ToList());        
         var tempFile = System.IO.Path.GetTempFileName() + ".png";
-        System.Drawing.Bitmap bitmap = new System.Drawing.Bitmap(Convert.ToInt32(1024), Convert.ToInt32(1024), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bitmap);
-        pane.Draw(g);
-        bitmap.Save(tempFile, System.Drawing.Imaging.ImageFormat.Png);
+        CreateGraph(graphData, tempFile);
         Message("image://" + tempFile);
 
         return null;
     }
+    
+    public class GraphData<Tx,Ty>
+    {
+        public List<Tx> X = new List<Tx>();
+        public List<Ty> Y = new List<Ty>();
 
-    private ZedGraph.PointPairList BuildBudgetGraph(BudgetCategory category, IList<BudgetTransaction> transactions)
+        public GraphData()
+        {
+        }
+
+        public void Add(Tx x, Ty y)
+        {
+            X.Add(x);
+            Y.Add(y);
+        }
+    }
+
+    public struct DayBalance
+    {
+        public DateTime Date;
+        public float Balance;
+    }
+
+    private GraphData<DateTime, float> BuildBudgetGraph(BudgetCategory category, IList<BudgetTransaction> transactions)
     {
         var balance = category.Limit;
-        var output = new ZedGraph.PointPairList();
+        var output = new GraphData<DateTime, float> ();
         for(int i = 0; i < category.Period.Days; ++i)
         {
             var date = category.Period.StartDate + TimeSpan.FromDays(i);
             var dailyExpense = transactions.Where(x => x.Timestamp.Date == date).Sum(e => e.Cost);
-            balance -= dailyExpense;
-            output.Add(date.Day, balance);
+            balance -= dailyExpense;            
+            output.Add(date, balance);
         }
         
         return output;
-    }
-
-    private int[] buildTeamBData()
-    {
-        int[] goalsScored = new int[10];
-        for (int i = 0; i < 10; i++)
-        {
-            goalsScored[i] = (i + 10) * 11;
-        }
-        return goalsScored;
     }
 }
 public class VisualiseBudgetCommandParser : CommandParser

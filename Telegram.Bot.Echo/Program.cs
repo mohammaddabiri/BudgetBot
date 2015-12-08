@@ -57,7 +57,7 @@ namespace Telegram.Bot.Echo
                         }
                         if (update.Message.Type == MessageType.TextMessage)
                         {
-                            await Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
+                            Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
                             //await Task.Delay(2000);
 
                             Service.ProcessCommand(update.Message.Text.Trim(), update.Message.Date);
