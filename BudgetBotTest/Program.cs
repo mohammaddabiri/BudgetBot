@@ -222,7 +222,7 @@ public class ReportBudgetCommand : Command
     {
         var spendingPct = balance / category.Limit;
         var remainingDays = category.Period.RemainingDays;
-        return string.Format("{0} {1} / {2} ({3}) {4} days", category.Name.PadRight(16), balance.ToString("C"), category.Limit.ToString("C"), spendingPct.ToString("P0"), remainingDays.ToString().PadLeft(4));
+        return string.Format("{0}\n{1} / {2} ({3}) {4} days", category.Name.PadRight(16), balance.ToString("C"), category.Limit.ToString("C"), spendingPct.ToString("P0"), remainingDays.ToString().PadLeft(4));
     }
 }
 
