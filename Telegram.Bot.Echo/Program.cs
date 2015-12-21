@@ -50,49 +50,51 @@ namespace Telegram.Bot.Echo
                         try
                         {
                             var messageType = update.Message.Type;
+
+                            if (update.Message.Type == MessageType.TextMessage)
+                            {
+                                //await Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
+                                //await Task.Delay(2000);
+
+                                Service.ProcessCommand(update.Message.Text.Trim(), update.Message.Date);
+
+                                while (m_cachedOutputs.Count > 0)
+                                {
+                                    var cachedMessage = m_cachedOutputs.Dequeue();
+                                    if (cachedMessage.StartsWith("image://"))
+                                    {
+                                        var imageUrl = cachedMessage.Replace("image://", "");
+                                        var fileStream = new FileStream(imageUrl, FileMode.Open);
+                                        var fileToSend = new FileToSend(imageUrl, fileStream);
+                                        var sendWait = Bot.SendPhoto(update.Message.Chat.Id, fileToSend);
+                                        //sendWait.Wait(3000);
+                                        fileStream.Close();
+                                    }
+                                    else if(!string.IsNullOrWhiteSpace(cachedMessage))
+                                    {
+                                        Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
+                                    }
+                                }
+                            }
+
+                            if (update.Message.Type == MessageType.PhotoMessage)
+                            {
+                                var file = await Bot.GetFile(update.Message.Photo.LastOrDefault()?.FileId);
+
+                                Console.WriteLine("Received Photo: {0}", file.FilePath);
+
+                                var filename = file.FileId + "." + file.FilePath.Split('.').Last();
+
+                                using (var profileImageStream = File.Open(filename, FileMode.Create))
+                                {
+                                    await file.FileStream.CopyToAsync(profileImageStream);
+                                }
+                            }
                         }
                         catch
                         {
                             continue;
                         }
-                        if (update.Message.Type == MessageType.TextMessage)
-                        {
-                            Bot.SendChatAction(update.Message.Chat.Id, ChatAction.Typing);
-                            //await Task.Delay(2000);
-
-                            Service.ProcessCommand(update.Message.Text.Trim(), update.Message.Date);
-                            
-                            while(m_cachedOutputs.Count > 0)
-                            {
-                                var cachedMessage = m_cachedOutputs.Dequeue();
-                                if (cachedMessage.StartsWith("image://"))
-                                {
-                                    var imageUrl = cachedMessage.Replace("image://", "");
-                                    var fileStream = new FileStream(imageUrl, FileMode.Open);
-                                    var fileToSend = new FileToSend(imageUrl, fileStream);
-                                    Bot.SendPhoto(update.Message.Chat.Id, fileToSend);
-                                }
-                                else
-                                {
-                                    Bot.SendTextMessage(update.Message.Chat.Id, cachedMessage);
-                                }
-                            }
-                        }
-
-                        if (update.Message.Type == MessageType.PhotoMessage)
-                        {
-                            var file = await Bot.GetFile(update.Message.Photo.LastOrDefault()?.FileId);
-
-                            Console.WriteLine("Received Photo: {0}", file.FilePath);
-
-                            var filename = file.FileId + "." + file.FilePath.Split('.').Last();
-
-                            using (var profileImageStream = File.Open(filename, FileMode.Create))
-                            {
-                                await file.FileStream.CopyToAsync(profileImageStream);
-                            }
-                        }
-
                         offset = update.Id + 1;
                     }
                 }

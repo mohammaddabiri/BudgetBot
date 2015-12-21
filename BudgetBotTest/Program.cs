@@ -343,12 +343,17 @@ public class VisualiseBudgetCommand : Command
 
         var startingY = yvals[0];
         var linearY = new float[yvals.Length];
-        for(var i = 0; i < xvals.Length; ++i)
+        var todayY = new float[yvals.Length];
+        for (var i = 0; i < xvals.Length; ++i)
         {
+            if(data.X[i].Date == DateTime.Today)
+            {
+                todayY[i] = startingY;
+            }
             var xPct = i / (float)xvals.Length;
             linearY[i] = startingY * (1f-xPct);
         }
-
+                        
         // create the chart
         var chart = new Chart();
         chart.Size = new Size(600, 250);
@@ -360,7 +365,7 @@ public class VisualiseBudgetCommand : Command
         chartArea.AxisX.LabelStyle.Font = new Font("Consolas", 8);
         chartArea.AxisY.LabelStyle.Font = new Font("Consolas", 8);        
         chart.ChartAreas.Add(chartArea);
-
+                
         var series = new Series();
         series.Name = "Series1";
         series.ChartType = SeriesChartType.FastLine;
@@ -394,6 +399,13 @@ public class VisualiseBudgetCommand : Command
 
         chart.Series["Series3"].Points.DataBindXY(xvals, linearY);
         chart.Series["Series3"].ChartType = SeriesChartType.Spline;
+
+        var todaySeries = new Series();
+        todaySeries.Name = "TodaySeries";
+        todaySeries.ChartType = SeriesChartType.BoxPlot;
+        todaySeries.XValueType = ChartValueType.DateTime;
+        todaySeries.Points.DataBindXY(xvals, todayY);
+        chart.Series.Add(todaySeries);
 
         // draw!
         chart.Invalidate();

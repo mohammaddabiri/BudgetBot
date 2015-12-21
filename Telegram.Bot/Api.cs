@@ -153,7 +153,7 @@ namespace Telegram.Bot
             if (isMardown)
                 additionalParameters.Add("parse_mode", "Markdown");
 
-            return await SendMessage(MessageType.TextMessage, chatId, text, replyToMessageId, replyMarkup, additionalParameters).ConfigureAwait(false);
+             return await SendMessage(MessageType.TextMessage, chatId, text, replyToMessageId, replyMarkup, additionalParameters).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -719,8 +719,14 @@ namespace Telegram.Bot
                         response = await client.GetAsync(uri).ConfigureAwait(false);
                     }
 
-                    responseObject = await response.Content.ReadAsAsync<ApiResponse<T>>().ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
+                    try
+                    {
+                        responseObject = await response.Content.ReadAsAsync<ApiResponse<T>>().ConfigureAwait(false);
+                        response.EnsureSuccessStatusCode();
+                    }
+                    catch
+                    {
+                    }
                 }
                 catch (HttpRequestException e) when (e.Message.Contains("400"))
                 {
