@@ -64,11 +64,31 @@ namespace Telegram.Bot.Echo
                                     if (cachedMessage.StartsWith("image://"))
                                     {
                                         var imageUrl = cachedMessage.Replace("image://", "");
-                                        var fileStream = new FileStream(imageUrl, FileMode.Open);
-                                        var fileToSend = new FileToSend(imageUrl, fileStream);
-                                        var sendWait = Bot.SendPhoto(update.Message.Chat.Id, fileToSend);
-                                        //sendWait.Wait(3000);
-                                        fileStream.Close();
+                                        //var fileStream = new FileStream(imageUrl, FileMode.Open);
+                                        
+
+                                        using (var stream = File.Open(imageUrl, FileMode.Open))
+                                        {
+                                            var fileToSend = new FileToSend(imageUrl, stream);
+                                            ThrowIt();
+                                            var rep = await Bot.SendPhoto(update.Message.Chat.Id, fileToSend, "category");
+                                            //var rep = await Bot.SendPhoto(update.Message.Chat.Id, fileToSend);
+                                            //var rep = await Bot.SendPhoto(Convert.ToInt32(item), stream, txtMessage.Text);
+                                        }
+
+                                        int bpp = 3;
+                                        //int timeout = 300;
+                                        //var task = Bot.SendPhoto(update.Message.Chat.Id, fileToSend).Result;                                        
+                                        //if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                                        //{
+                                        //    // task completed within timeout
+                                        //    fileStream.Close();
+                                        //}
+                                        //else
+                                        //{
+                                        //    // timeout logic
+                                        //    fileStream.Close();
+                                        //}
                                     }
                                     else if(!string.IsNullOrWhiteSpace(cachedMessage))
                                     {
@@ -104,6 +124,12 @@ namespace Telegram.Bot.Echo
                 var exception = e;
             }
 
+        }
+
+        async Task ThrowIt()
+        {
+            Task.Delay(TimeSpan.FromSeconds(1.5)).Wait();
+            throw new Exception();
         }
 
         private void Service_OnMessage(string msg)

@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Windows.Forms.DataVisualization.Charting;
+using Engine.Storage;
+using CurlSharp;
+using MyCouch;
 
 public static class Extensions
 {
@@ -49,7 +52,8 @@ public class DeleteBudgetCommand : Command
 
     public override Task Execute(DateTime timestamp)
     {
-        if(Endpoints.RemoveBudgetCategory(Category))
+        var caller = Endpoints.RemoveBudgetCategory(Category);
+        if (caller.Result)
         {
             Message("Removed budget");
         }
@@ -118,9 +122,10 @@ public class ListCommand : Command
     }
 
     public override Task Execute(DateTime timestamp)
-    {
-        var allTransactions = Endpoints.FetchBudgetTransactions(Category);
-        if(allTransactions == null || allTransactions.Count == 0)
+    {        
+        var allTransactionsCaller = Endpoints.FetchBudgetTransactions(Category);
+        var allTransactions = allTransactionsCaller.Result;
+        if (allTransactions == null || allTransactions.Count == 0)
         {
             Message("No transactions recorded.");
             return null;
@@ -185,19 +190,19 @@ public class ReportBudgetCommand : Command
 
     public override Task Execute(DateTime timestamp)
     {
-        var budgetList = Endpoints.FetchBudgetList();
+        var budgetListQuery = Endpoints.FetchBudgetList();
+        var budgetList = budgetListQuery.Result;
         if (budgetList == null || budgetList.Categories == null || budgetList.Categories.Count == 0)
         {
             Message("No budgets defined.");
             return null;
         }
-
-
+        
         if (string.IsNullOrEmpty(Category))
         {
             foreach (var budgetCategory in budgetList.Categories)
             {
-                var balance = Endpoints.GetBalance(budgetCategory.Name);
+                var balance = Endpoints.GetBalance(budgetCategory.Name).Result;
                 var message1 = FormatCategoryReport(budgetCategory, balance);
                 Message(message1);
             }
@@ -211,7 +216,7 @@ public class ReportBudgetCommand : Command
                 return null;
             }
 
-            var balance = Endpoints.GetBalance(category.Name);
+            var balance = Endpoints.GetBalance(category.Name).Result;
             var catMessage1 = FormatCategoryReport(category, balance);
             Message(catMessage1);
         }
@@ -247,7 +252,10 @@ public class AddTransactionCommand : Command
 
     public override Task Execute(DateTime timestamp)
     {
-        var budgetList = Endpoints.FetchBudgetList();
+
+        var budgetListQuery = Endpoints.FetchBudgetList();
+        var budgetList = budgetListQuery.Result;
+        //var budgetList = Endpoints.FetchBudgetList();
         if (budgetList == null)
         {
             Message("No budgets allocated.");
@@ -269,7 +277,7 @@ public class AddTransactionCommand : Command
                 }
                 else
                 {
-                    var allTransactions = Endpoints.FetchBudgetTransactions(Category);
+                    var allTransactions = Endpoints.FetchBudgetTransactions(Category).Result;
                     var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0).Sum(x => x.Cost);
                     var newBalance = category.Limit - allExpenses;
                     var balanceMessage = string.Format("Balance: {0}", newBalance.ToString("C"));
@@ -476,8 +484,10 @@ public class VisualiseBudgetCommand : Command
     //}
     public override Task Execute(DateTime timestamp)
     {
-        var allTransactions = Endpoints.FetchBudgetTransactions(Category);
-        var category = Endpoints.GetBudgetCategory(Category);
+        var allTransactionsCaller = Endpoints.FetchBudgetTransactions(Category);
+        var allTransactions = allTransactionsCaller.Result;
+        var categoryCaller = Endpoints.GetBudgetCategory(Category);
+        var category = categoryCaller.Result;
         var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0);
 
         var graphData = BuildBudgetGraph(category, allExpenses.ToList());        
@@ -656,95 +666,111 @@ public class ListCommandParser : CommandParser
     }
 }
 
-public class BudgetEndpoints
+public class FileStoreDBConnection
 {
-    ServiceStack.Redis.RedisClient s_redis;
+    public string RootUrl;
+    public string DatabaseName;
+    private LocalFileStore m_fileStore;
 
-    public BudgetEndpoints(ServiceStack.Redis.RedisClient redis)
+    public FileStoreDBConnection(string rootUrl, string databaseName)
     {
-        s_redis = redis;
+        RootUrl = rootUrl;
+        DatabaseName = databaseName;
+        m_fileStore = new LocalFileStore(RootUrl);        
     }
 
-    public void ClearBudgetTransactions(string category)
+    public string FilePath(string documentId)
     {
-        var emptyTransactions = new BudgetTransactions();
-        s_redis.Set("budget-" + category.ToLower(), emptyTransactions.AsJson());
-        s_redis.Save();
-    }
-    
-    public BudgetTransactions FetchBudgetTransactions(string category)
-    {
-        var transactionJson = s_redis.GetValue("budget-" + category.ToLower());
-        var budgetList = BudgetTransactions.FromJson(transactionJson);
-        return budgetList;
+        return System.IO.Path.Combine(DatabaseName, documentId);
     }
 
-    public BudgetCategory GetBudgetCategory(string category)
+    public void CreateDocument(string documentId, string contents)
     {
-        var budgetList = FetchBudgetList();
-        return budgetList[category];
+        var filePath = FilePath(documentId);
+        //var fileStream = m_fileStore.OpenForWrite(filePath);
+        m_fileStore.FileWrite(filePath, contents);
     }
 
-    public float GetBalanceAt(string categoryName, DateTime time)
+    public string GetDocument(string documentId)
     {
-        var allTransactions = FetchBudgetTransactions(categoryName);
-        var category = GetBudgetCategory(categoryName);
-        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0 && o.Timestamp.CompareTo(time) > 0).Sum(x => x.Cost);
-        var newBalance = category.Limit - allExpenses;
-        return newBalance;
+        string contents = string.Empty;
+        m_fileStore.FileRead(FilePath(documentId), out contents);
+        return contents;
+    }    
+}
+
+public class CouchDBConnection
+{
+    public string ServerUrl;
+    public string DatabaseName;
+    SharpCouch.DB m_db = new SharpCouch.DB();
+
+    public CouchDBConnection(string serverUrl, string databaseName)
+    {
+        ServerUrl = serverUrl;
+        DatabaseName = databaseName;
     }
 
-    public float GetBalance(string categoryName)
+    public void CreateDocument(string documentId, string contents)
     {
-        var allTransactions = FetchBudgetTransactions(categoryName);
-        var category = GetBudgetCategory(categoryName);
-        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0).Sum(x => x.Cost);
-        var newBalance = category.Limit - allExpenses;
-        return newBalance;
+        m_db.CreateDocument(ServerUrl, DatabaseName, contents);
     }
 
-    public BudgetList FetchBudgetList()
+    public string GetDocument(string documentId)
     {
-        var budgetJson = s_redis.GetValue("budgets");
-        var budgetList = BudgetList.ParseJson(budgetJson);
-        if (budgetList == null)
-        {
-            budgetList = new BudgetList();
-        }
-
-        return budgetList;
+        return m_db.GetDocument(ServerUrl, DatabaseName, documentId);
     }
 
-    public BudgetTransaction AddTransaction(string category, float cost, DateTime timestamp, string notes = "")
+    public SharpCouch.DocInfo[] GetAllDocuments()
     {
-        var transactions = FetchBudgetTransactions(category);
-        var newTransaction = new BudgetTransaction(timestamp, category, cost, notes);
-        transactions.Add(newTransaction);
-
-        s_redis.SetValue("budget-" + category.ToLower(), transactions.AsJson());
-        s_redis.Save();
-        return newTransaction;
-    }
-
-    public bool RemoveBudgetCategory(string newCategory)
-    {
-        var removed = false;
-        var budgetList = FetchBudgetList();
-        var budgetCategory = budgetList[newCategory];
-        if (budgetCategory != null)
-        {
-            removed = budgetList.Categories.Remove(budgetCategory);
-        }
-                
-        s_redis.SetValue("budgets", budgetList.AsJson());
-        s_redis.Save();
-
-        return removed;
+        return m_db.GetAllDocuments(ServerUrl, DatabaseName);
     }
     
-    public BudgetList AddBudgetCategory(string newCategory, float budget, DateTime startDate, BudgetInterval interval)
+    public void EnsureDBExists(string dbName)
     {
-        var budgetList = FetchBudgetList();
+    }
+}
+
+public class GoogleSpreadsheetBackend
+{
+
+}
+
+//public interface IKeyValueStore<TKey, TVal>
+//{
+//    TVal Get(TKey key) { get; }
+//}
+
+public class CouchDbBackend //: IKeyValueStore<string, string>
+{
+    public async Task<string> Get(string key) {        
+        using (var client = new MyCouchStore(Url, Db))
+        {
+            var value = await client.GetByIdAsync(key);
+            return value;
+        }
+    }
+
+    public async Task Set(string key, string contents)
+    {
+        using (var client = new MyCouchStore(Url, Db))
+        {
+            await client.SetAsync(key, contents);
+        }
+    }
+
+    public CouchDbBackend(string url, string database)
+    {
+        Url = url;
+        Db = database;
+    }
+
+    public string Url;
+    public string Db;
+    
+    public async Task<BudgetList> AddBudgetCategory(string newCategory, float budget, DateTime startDate, BudgetInterval interval)
+    {
+        var budgetList = await FetchBudgetList();
         var budgetCategory = budgetList[newCategory];
         if (budgetCategory == null)
         {
@@ -755,11 +781,244 @@ public class BudgetEndpoints
         budgetCategory.Limit = budget;
         budgetCategory.Period = new BudgetPeriod(startDate, interval);
 
-        s_redis.SetValue("budgets", budgetList.AsJson());
-        s_redis.Save();
-        //s_redis.Set("budgets", budgetList);
-        //s_redis.Add("budgets", budgetList);
+        await Set("budgets", budgetList.AsJson());
+        //using (var client = new MyCouchStore(Url, Db))
+        //{
+        //    var retrieved = await client.SetAsync("budgets", budgetList.AsJson());
+            
         return budgetList;
+        //}
+        //s_redis.SetValue("budgets", budgetList.AsJson());
+        //s_redis.Save();
+        //s_redis.Set("budgets", budgetList);
+        //s_redis.Add("budgets", budgetList);        
+    }
+        
+    public async Task<BudgetTransactions> FetchBudgetTransactions(string category)
+    {
+        var key = "budget-" + category.ToLower();
+        var transactionJson = await Get("budgets");
+        var budgetList = BudgetTransactions.FromJson(transactionJson);
+        return budgetList;
+    }
+
+    public async Task<float> GetBalanceAt(string categoryName, DateTime time)
+    {
+        var allTransactions = await FetchBudgetTransactions(categoryName);
+        var category = await GetBudgetCategory(categoryName);
+        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0 && o.Timestamp.CompareTo(time) > 0).Sum(x => x.Cost);
+        var newBalance = category.Limit - allExpenses;
+        return newBalance;
+    }
+
+    public async Task<float> GetBalance(string categoryName)
+    {
+        var allTransactions = await FetchBudgetTransactions(categoryName);
+        var category = await GetBudgetCategory(categoryName);
+        var allExpenses = allTransactions.Where(o => o.Timestamp.CompareTo(category.Period.StartDate) > 0).Sum(x => x.Cost);
+        var newBalance = category.Limit - allExpenses;
+        return newBalance;
+    }
+
+    public async Task<BudgetCategory> GetBudgetCategory(string category)    
+    {
+        var budgetList = await FetchBudgetList();
+        return budgetList[category];
+    }
+
+    public async Task ClearBudgetTransactions(string category)
+    {
+        //using (var client = new MyCouchStore(Url, Db))
+        //{
+        //    var retrieved = await client.GetByIdAsync("budgets");
+        //    var budgetList = BudgetList.ParseJson(retrieved);
+        //    if (budgetList == null)
+        //    {
+        //        budgetList = new BudgetList();
+        //    }
+
+        //    var emptyTransactions = new BudgetTransactions();
+        //    s_redis.Set("budget-" + category.ToLower(), emptyTransactions.AsJson());
+        //    s_redis.Save();
+
+        //    return budgetList;
+        //}
+    }
+
+    public async Task<bool> RemoveBudgetCategory(string newCategory)
+    {
+        var removed = false;
+        var budgetList = await FetchBudgetList();
+        var budgetCategory = budgetList[newCategory];
+        if (budgetCategory != null)
+        {
+            removed = budgetList.Categories.Remove(budgetCategory);
+        }
+
+        await Set("budgets", budgetList.AsJson());                
+        return removed;
+    }
+    
+    public async Task<BudgetTransaction> AddTransaction(string category, float cost, DateTime timestamp, string notes = "")
+    {
+        var transactions = await FetchBudgetTransactions(category);
+        var newTransaction = new BudgetTransaction(timestamp, category, cost, notes);
+        transactions.Add(newTransaction);
+
+        var key = "budget-" + category.ToLower();
+        await Set(key, transactions.AsJson());
+        
+        return newTransaction;
+    }
+
+    public async Task<BudgetList> FetchBudgetList()
+    {
+        using (var client = new MyCouchStore(Url, Db))
+        {
+            var retrieved = await client.GetByIdAsync("budgets");
+            var budgetList = BudgetList.ParseJson(retrieved);
+            if (budgetList == null)
+            {
+                budgetList = new BudgetList();
+            }
+
+            return budgetList;
+        }
+    }    
+}
+
+public class BudgetEndpoints
+{
+    ServiceStack.Redis.RedisClient s_redis;
+    const string c_couchDBServerUrl = @"https://budgetbot.smileupps.com";
+    //const string c_couchDBServerUrl = @"https://admin:00934444be14@budgetbot.smileupps.com";
+    CouchDBConnection m_couchDBBudgets;
+    const string c_localDbStoreUrl = @"d:\db\budgetbot";
+    FileStoreDBConnection m_localDb;
+
+    public static void OnDebugData(CurlInfoType infoType, String message, Object extraData)
+    {
+        //var userData = (string)extraData;
+        Console.Write(message);
+    }
+
+    public static Int32 OnWriteData(Byte[] buf, Int32 size, Int32 nmemb, Object extraData)
+    {
+        //var userData = (string)extraData;
+        Console.Write(Encoding.UTF8.GetString(buf));
+        return size * nmemb;
+    }
+
+    async Task CouchDD(string url, string db)
+    {
+        using (var client = new MyCouchStore(url, db))
+        {
+            //var entries = client.get;
+            //POST with server generated id
+            var retrieved = await client.GetByIdAsync("budgets");
+            //var drugs = await client.Documents.GetAsync("{\"name\":\"Daniel\"}");
+            int bpp = 3;
+        }
+    }
+
+    void InvokeCurl()
+    {
+        try
+        {
+            Curl.GlobalInit(CurlInitFlag.All);
+
+            using (var easy = new CurlEasy())
+            {
+                easy.Url = @"https://admin:00934444be14@budgetbot.smileupps.com/dabiri/budgets/";
+                easy.WriteData = null;
+                easy.WriteFunction = OnWriteData;
+                easy.DebugFunction = OnDebugData;
+                //easy.ProgressFunction = OnProgressData;
+                easy.Perform();
+            }
+
+            Curl.GlobalCleanup();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+    }
+
+    CouchDbBackend m_couchBackend;
+    public BudgetEndpoints(ServiceStack.Redis.RedisClient redis)
+    {
+        s_redis = redis;
+        //m_couchDBBudgets = new CouchDBConnection(c_couchDBServerUrl, "dabiri");
+        //m_localDb = new FileStoreDBConnection(c_localDbStoreUrl, "budgets");
+        m_couchBackend = new CouchDbBackend(c_couchDBServerUrl, "dabiri");
+        
+        //CouchDD(c_couchDBServerUrl, "dabiri").Wait();
+
+
+        //InvokeCurl();
+
+        //var databases = s_db.GetDatabases(c_couchDBServerUrl);
+        //var lastDb = s_db.GetAllDocuments(c_couchDBServerUrl, databases.Last());
+        //m_localDb.CreateDocument("food", "arse");
+        //        m_couchDBBudgets.CreateDocument("budgets", "none");
+        //var allDocs = m_couchDBBudgets.GetAllDocuments();
+
+        int bpp = 3;
+    }
+
+
+    public async Task ClearBudgetTransactions(string category)
+    {
+        await m_couchBackend.ClearBudgetTransactions(category);
+    }
+    
+    public async Task<BudgetTransactions> FetchBudgetTransactions(string category)
+    {
+        return await m_couchBackend.FetchBudgetTransactions(category);        
+    }
+
+    public async Task<BudgetCategory> GetBudgetCategory(string category)
+    {
+        return await m_couchBackend.GetBudgetCategory(category);
+    }
+
+    public async Task<float> GetBalanceAt(string categoryName, DateTime time)
+    {
+        return await m_couchBackend.GetBalanceAt(categoryName, time);        
+    }
+
+    public async Task<float> GetBalance(string categoryName)
+    {
+        return await m_couchBackend.GetBalance(categoryName);        
+    }
+
+    public async Task<BudgetList> FetchBudgetList()
+    {
+        return await m_couchBackend.FetchBudgetList();
+        //var budgetJson = s_redis.GetValue("budgets");
+        //var budgetList = BudgetList.ParseJson(budgetJson);
+        //if (budgetList == null)
+        //{
+        //    budgetList = new BudgetList();
+        //}
+
+        //return budgetList;
+    }
+
+    public async Task<BudgetTransaction> AddTransaction(string category, float cost, DateTime timestamp, string notes = "")
+    {
+        return await m_couchBackend.AddTransaction(category, cost, timestamp, notes);        
+    }
+
+    public async Task<bool> RemoveBudgetCategory(string newCategory)
+    {
+        return await m_couchBackend.RemoveBudgetCategory(newCategory);        
+    }
+    
+    public async Task<BudgetList> AddBudgetCategory(string newCategory, float budget, DateTime startDate, BudgetInterval interval)
+    {        
+        return await m_couchBackend.AddBudgetCategory(newCategory, budget, startDate, interval);
     }
 }
 
@@ -1081,7 +1340,7 @@ public class BudgetBotService
             while (true)
             {
                 var userCommand = Console.ReadLine();
-                Service.ProcessCommand(userCommand, DateTime.Now);
+                Service.ProcessCommand(userCommand, DateTime.Now);            
             }
         }       
     }
